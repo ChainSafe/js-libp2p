@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 'use strict'
 
 const libp2p = require('../../')
@@ -22,7 +23,7 @@ class MyBundle extends libp2p {
       config: {
         peerDiscovery: {
           mdns: {
-            interval: 1000,
+            interval: 20e3,
             enabled: true
           }
         }

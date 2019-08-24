@@ -3,54 +3,74 @@
 const PeerId = require('peer-id')
 const PeerInfo = require('peer-info')
 const multiaddr = require('multiaddr')
-const setImmediate = require('async/setImmediate')
+const errCode = require('err-code')
 
-module.exports = (node) => {
-  /*
-   * Helper method to check the data type of peer and convert it to PeerInfo
-   */
-  return function (peer, callback) {
-    let p
-    // PeerInfo
-    if (PeerInfo.isPeerInfo(peer)) {
-      p = peer
-    // Multiaddr instance or Multiaddr String
-    } else if (multiaddr.isMultiaddr(peer) || typeof peer === 'string') {
-      if (typeof peer === 'string') {
-        try {
-          peer = multiaddr(peer)
-        } catch (err) {
-          return setImmediate(() => callback(err))
-        }
-      }
-
-      const peerIdB58Str = peer.getPeerId()
-
-      if (!peerIdB58Str) {
-        return setImmediate(() => {
-          callback(new Error('peer multiaddr instance or string must include peerId'))
-        })
-      }
-
-      try {
-        p = node.peerBook.get(peerIdB58Str)
-      } catch (err) {
-        p = new PeerInfo(PeerId.createFromB58String(peerIdB58Str))
-      }
-      p.multiaddrs.add(peer)
-
-      // PeerId
-    } else if (PeerId.isPeerId(peer)) {
-      const peerIdB58Str = peer.toB58String()
-      try {
-        p = node.peerBook.get(peerIdB58Str)
-      } catch (err) {
-        return node.peerRouting.findPeer(peer, callback)
-      }
-    } else {
-      return setImmediate(() => callback(new Error('peer type not recognized')))
-    }
-
-    setImmediate(() => callback(null, p))
+/**
+ * Converts the given `peer` to a `PeerInfo` instance.
+ * The `PeerBook` will be checked for the resulting peer, and
+ * the peer will be updated in the `PeerBook`.
+ *
+ * @param {PeerInfo|PeerId|Multiaddr|string} peer
+ * @param {PeerBook} peerBook
+ * @returns {PeerInfo}
+ */
+function getPeerInfo (peer, peerBook) {
+  if (typeof peer === 'string') {
+    peer = multiaddr(peer)
   }
+
+  let addr
+  if (multiaddr.isMultiaddr(peer)) {
+    addr = peer
+    try {
+      peer = PeerId.createFromB58String(peer.getPeerId())
+    } catch (err) {
+      throw errCode(
+        new Error(`${peer} is not a valid peer type`),
+        'ERR_INVALID_MULTIADDR'
+      )
+    }
+  }
+
+  if (PeerId.isPeerId(peer)) {
+    peer = new PeerInfo(peer)
+  }
+
+  addr && peer.multiaddrs.add(addr)
+
+  return peerBook ? peerBook.put(peer) : peer
+}
+
+/**
+ * If `getPeerInfo` does not return a peer with multiaddrs,
+ * the `libp2p` PeerRouter will be used to attempt to find the peer.
+ *
+ * @async
+ * @param {PeerInfo|PeerId|Multiaddr|string} peer
+ * @param {Libp2p} libp2p
+ * @returns {Promise<PeerInfo>}
+ */
+function getPeerInfoRemote (peer, libp2p) {
+  let peerInfo
+
+  try {
+    peerInfo = getPeerInfo(peer, libp2p.peerBook)
+  } catch (err) {
+    return Promise.reject(errCode(
+      new Error(`${peer} is not a valid peer type`),
+      'ERR_INVALID_PEER_TYPE'
+    ))
+  }
+
+  // If we don't have an address for the peer, attempt to find it
+  if (peerInfo.multiaddrs.size < 1) {
+    return libp2p.peerRouting.findPeer(peerInfo.id)
+  }
+
+  return Promise.resolve(peerInfo)
+}
+
+module.exports = {
+  getPeerInfoRemote,
+  getPeerInfo
 }

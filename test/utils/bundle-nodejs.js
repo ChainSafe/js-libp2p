@@ -6,7 +6,9 @@ const WS = require('libp2p-websockets')
 const Bootstrap = require('libp2p-bootstrap')
 const SPDY = require('libp2p-spdy')
 const KadDHT = require('libp2p-kad-dht')
+const GossipSub = require('libp2p-gossipsub')
 const MPLEX = require('libp2p-mplex')
+const PULLMPLEX = require('pull-mplex')
 const SECIO = require('libp2p-secio')
 const defaultsDeep = require('@nodeutils/defaults-deep')
 const libp2p = require('../..')
@@ -17,6 +19,7 @@ function mapMuxers (list) {
     switch (pref.trim().toLowerCase()) {
       case 'spdy': return SPDY
       case 'mplex': return MPLEX
+      case 'pullmplex': return PULLMPLEX
       default:
         throw new Error(pref + ' muxer not available')
     }
@@ -30,7 +33,7 @@ function getMuxers (muxers) {
   } else if (muxers) {
     return mapMuxers(muxers)
   } else {
-    return [MPLEX, SPDY]
+    return [PULLMPLEX, MPLEX, SPDY]
   }
 }
 
@@ -50,10 +53,12 @@ class Node extends libp2p {
           MulticastDNS,
           Bootstrap
         ],
-        dht: KadDHT
+        dht: KadDHT,
+        pubsub: GossipSub
       },
       config: {
         peerDiscovery: {
+          autoDial: true,
           mdns: {
             interval: 10000,
             enabled: false
@@ -73,11 +78,13 @@ class Node extends libp2p {
         },
         dht: {
           kBucketSize: 20,
-          enabledDiscovery: true
+          randomWalk: {
+            enabled: true
+          },
+          enabled: true
         },
-        EXPERIMENTAL: {
-          dht: false,
-          pubsub: false
+        pubsub: {
+          enabled: false
         }
       }
     }

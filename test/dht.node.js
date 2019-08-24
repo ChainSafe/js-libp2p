@@ -6,19 +6,18 @@ const chai = require('chai')
 chai.use(require('dirty-chai'))
 const expect = chai.expect
 
+const MemoryStore = require('interface-datastore').MemoryDatastore
+
 const createNode = require('./utils/create-node')
 
 describe('.dht', () => {
   describe('enabled', () => {
     let nodeA
+    const datastore = new MemoryStore()
 
     before(function (done) {
       createNode('/ip4/0.0.0.0/tcp/0', {
-        config: {
-          EXPERIMENTAL: {
-            dht: true
-          }
-        }
+        datastore
       }, (err, node) => {
         expect(err).to.not.exist()
         nodeA = node
@@ -120,8 +119,8 @@ describe('.dht', () => {
     before(function (done) {
       createNode('/ip4/0.0.0.0/tcp/0', {
         config: {
-          EXPERIMENTAL: {
-            dht: false
+          dht: {
+            enabled: false
           }
         }
       }, (err, node) => {
@@ -141,6 +140,7 @@ describe('.dht', () => {
 
       nodeA.dht.put(key, value, (err) => {
         expect(err).to.exist()
+        expect(err.code).to.equal('ERR_DHT_DISABLED')
         done()
       })
     })
@@ -150,6 +150,7 @@ describe('.dht', () => {
 
       nodeA.dht.get(key, (err) => {
         expect(err).to.exist()
+        expect(err.code).to.equal('ERR_DHT_DISABLED')
         done()
       })
     })
@@ -159,6 +160,7 @@ describe('.dht', () => {
 
       nodeA.dht.getMany(key, 10, (err) => {
         expect(err).to.exist()
+        expect(err.code).to.equal('ERR_DHT_DISABLED')
         done()
       })
     })

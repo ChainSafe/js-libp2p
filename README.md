@@ -8,12 +8,14 @@
   <a href="http://ipn.io"><img src="https://img.shields.io/badge/made%20by-Protocol%20Labs-blue.svg?style=flat-square" /></a>
   <a href="http://libp2p.io/"><img src="https://img.shields.io/badge/project-libp2p-yellow.svg?style=flat-square" /></a>
   <a href="http://webchat.freenode.net/?channels=%23libp2p"><img src="https://img.shields.io/badge/freenode-%23libp2p-yellow.svg?style=flat-square" /></a>
+  <a href="https://discuss.libp2p.io"><img src="https://img.shields.io/discourse/https/discuss.libp2p.io/posts.svg" /></a>
   <a href="https://waffle.io/libp2p/libp2p"><img src="https://img.shields.io/badge/pm-waffle-yellow.svg?style=flat-square" /></a>
 </p>
 
 <p align="center">
-  <a href="https://ci.ipfs.team/job/libp2p/job/js-libp2p/job/master/"><img src="https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p/master" /></a>
-  <a href="https://codecov.io/gh/libp2p/js-libp2p"><img src="https://codecov.io/gh/libp2p/js-libp2p/branch/master/graph/badge.svg"></a>
+  <a href="https://travis-ci.com/libp2p/js-libp2p"><img src="https://flat.badgen.net/travis/libp2p/js-libp2p" /></a>
+  <a href="https://codecov.io/gh/libp2p/js-libp2p"><img src="https://img.shields.io/codecov/c/github/ipfs/js-ipfs-multipart/master.svg?style=flat-square"></a>
+  <a href="https://bundlephobia.com/result?p=ipfsd-ctl"><img src="https://flat.badgen.net/bundlephobia/minzip/ipfsd-ctl"></a>
   <br>
   <a href="https://david-dm.org/libp2p/js-libp2p"><img src="https://david-dm.org/libp2p/js-libp2p.svg?style=flat-square" /></a>
   <a href="https://github.com/feross/standard"><img src="https://img.shields.io/badge/code%20style-standard-brightgreen.svg?style=flat-square"></a>
@@ -49,6 +51,7 @@ We've come a long way, but this project is still in Alpha, lots of development i
   - [Install](#install)
   - [Usage](#usage)
   - [API](#api)
+    - [Events](#events)
 - [Development](#development)
   - [Tests](#tests)
   - [Packages](#packages)
@@ -62,7 +65,9 @@ libp2p is the product of a long and arduous quest to understand the evolution of
 We are in the process of writing better documentation, blog posts, tutorials and a formal specification. Today you can find:
 
 - [libp2p.io](https://libp2p.io)
+- [docs.libp2p.io](https://docs.libp2p.io)
 - [Specification (WIP)](https://github.com/libp2p/specs)
+- [Discussion Forums](https://discuss.libp2p.io)
 - Talks
   - [`libp2p <3 ethereum` at DEVCON2](https://ethereumfoundation.org/devcon/?session=libp2p) [📼 video](https://www.youtube.com/watch?v=HxueJbeMVG4) [slides](https://ethereumfoundation.org/devcon/wp-content/uploads/2016/10/libp2p-HEART-devp2p-IPFS-PLUS-Ethereum-networking.pdf) [📼 demo-1](https://ethereumfoundation.org/devcon/wp-content/uploads/2016/10/libp2p_demo1-1.mp4) [📼 demo-2](https://ethereumfoundation.org/devcon/wp-content/uploads/2016/10/libp2p_demo2-1.mp4)
 - Articles
@@ -89,13 +94,15 @@ npm install --save libp2p
 
 ## Usage
 
+**IMPORTANT NOTE**: We are currently on the way of migrating all our `libp2p` modules to use `async await` and `async iterators`, instead of callbacks and `pull-streams`. As a consequence, when you start a new libp2p project, we must check which versions of the modules you should use. For now, it is required to use the modules using callbacks with `libp2p`, while we are working on getting the remaining modules ready for a full migration. For more details, you can have a look at [libp2p/js-libp2p#266](https://github.com/libp2p/js-libp2p/issues/266).
+
 ### [Tutorials and Examples](/examples)
 
 You can find multiple examples on the [examples folder](/examples) that will guide you through using libp2p for several scenarios.
 
 ### Creating your own libp2p bundle
 
-The libp2p module acts as a glue for every libp2p module that you can use top create your own libp2p bundle. Creating your own libp2p bundle gives you a lot of freedom when it comes to customize it with features and default setup. We recommend creating your own libp2p bundle for the app you are developing that takes in account your needs (e.g. for a browser working version of libp2p that acts as the network layer of IPFS, we have a built one that leverages the Browser transports).
+The libp2p module acts as a glue for every libp2p module that you can use to create your own libp2p bundle. Creating your own libp2p bundle gives you a lot of freedom when it comes to customize it with features and default setup. We recommend creating your own libp2p bundle for the app you are developing that takes in account your needs (e.g. for a browser working version of libp2p that acts as the network layer of IPFS, we have a built one that leverages the Browser transports).
 
 **Example:**
 
@@ -106,7 +113,7 @@ The libp2p module acts as a glue for every libp2p module that you can use top cr
 //   crypto-channel: secio
 //   discovery: multicast-dns
 
-const libp2p = require('libp2p')
+const Libp2p = require('libp2p')
 const TCP = require('libp2p-tcp')
 const WS = require('libp2p-websockets')
 const SPDY = require('libp2p-spdy')
@@ -114,11 +121,15 @@ const MPLEX = require('libp2p-mplex')
 const SECIO = require('libp2p-secio')
 const MulticastDNS = require('libp2p-mdns')
 const DHT = require('libp2p-kad-dht')
+const GossipSub = require('libp2p-gossipsub')
 const defaultsDeep = require('@nodeutils/defaults-deep')
 const Protector = require('libp2p-pnet')
+const DelegatedPeerRouter = require('libp2p-delegated-peer-routing')
+const DelegatedContentRouter = require('libp2p-delegated-content-routing')
 
-class Node extends libp2p {
+class Node extends Libp2p {
   constructor (_options) {
+    const peerInfo = _options.peerInfo
     const defaults = {
       // The libp2p modules for this libp2p bundle
       modules: {
@@ -133,17 +144,27 @@ class Node extends libp2p {
         connEncryption: [
           SECIO
         ],
-        // Encryption for private networks. Needs additional private key to work
+        /** Encryption for private networks. Needs additional private key to work **/
         // connProtector: new Protector(/*protector specific opts*/),
+        /** Enable custom content routers, such as delegated routing **/
+        // contentRouting: [
+        //   new DelegatedContentRouter(peerInfo.id)
+        // ],
+        /** Enable custom peer routers, such as delegated routing **/
+        // peerRouting: [
+        //   new DelegatedPeerRouter()
+        // ],
         peerDiscovery: [
           MulticastDNS
         ],
-        dht: DHT                      // DHT enables PeerRouting, ContentRouting and DHT itself components
+        dht: DHT,                      // DHT enables PeerRouting, ContentRouting and DHT itself components
+        pubsub: GossipSub
       },
 
       // libp2p config options (typically found on a config.json)
       config: {                       // The config object is the part of the config that can go into a file, config.json.
         peerDiscovery: {
+          autoDial: true,             // Auto connect to discovered peers (limited by ConnectionManager minPeers)
           mdns: {                     // mdns options
             interval: 1000,           // ms
             enabled: true
@@ -155,7 +176,7 @@ class Node extends libp2p {
           // .. other discovery module options.
         },
         relay: {                      // Circuit Relay options
-          enabled: false,
+          enabled: true,
           hop: {
             enabled: false,
             active: false
@@ -163,12 +184,18 @@ class Node extends libp2p {
         },
         dht: {
           kBucketSize: 20,
-          enabledDiscovery: true      // Allows to disable discovery (enabled by default)
+          enabled: true,
+          randomWalk: {
+            enabled: true,      // Allows to disable discovery (enabled by default)
+            interval: 300e3,
+            timeout: 10e3
+          }
         },
-        // Enable/Disable Experimental features
-        EXPERIMENTAL: {               // Experimental features ("behind a flag")
-          pubsub: false,
-          dht: false
+        pubsub: {
+          enabled: true,
+          emitSelf: true,      // whether the node should emit to self on publish, in the event of the topic being subscribed
+          signMessages: true,  // if messages should be signed
+          strictSigning: true  // if message signing should be required
         }
       }
     }
@@ -183,34 +210,52 @@ class Node extends libp2p {
 
 ### API
 
-#### Create a Node - `new libp2p.Node(options)`
+**IMPORTANT NOTE**: All the methods listed in the API section that take a callback are also now Promisified. Libp2p is migrating away from callbacks to async/await, and in a future release (that will be announced in advance), callback support will be removed entirely. You can follow progress of the async/await endeavor at https://github.com/ipfs/js-ipfs/issues/1670.
 
-> Creates an instance of the libp2p.Node.
+#### Create a Node - `Libp2p.createLibp2p(options, callback)`
+
+> Behaves exactly like `new Libp2p(options)`, but doesn't require a PeerInfo. One will be generated instead
+
+```js
+const { createLibp2p } = require('libp2p')
+createLibp2p(options, (err, libp2p) => {
+  if (err) throw err
+  libp2p.start((err) => {
+    if (err) throw err
+  })
+})
+```
+
+- `options`: Object of libp2p configuration options
+- `callback`: Function with signature `function (Error, Libp2p) {}`
+
+#### Create a Node alternative - `new Libp2p(options)`
+
+> Creates an instance of Libp2p with a custom `PeerInfo` provided via `options.peerInfo`.
 
 Required keys in the `options` object:
 
 - `peerInfo`: instance of [PeerInfo][] that contains the [PeerId][], Keys and [multiaddrs][multiaddr] of the libp2p Node.
+- `modules.transport`: An array that must include at least 1 transport, such as `libp2p-tcp`.
 
 #### `libp2p.start(callback)`
 
 > Start the libp2p Node.
 
-`callback` is a function with the following `function (err) {}` signature, where `err` is an Error in case starting the node fails.
+`callback` following signature `function (err) {}`, where `err` is an Error in case starting the node fails.
 
 #### `libp2p.stop(callback)`
 
 > Stop the libp2p Node.
 
-`callback` is a function with the following `function (err) {}` signature, where `err` is an Error in case stopping the node fails.
+`callback` following signature `function (err) {}`, where `err` is an Error in case stopping the node fails.
 
 #### `libp2p.dial(peer, callback)`
 
 > Dials to another peer in the network, establishes the connection.
 
 - `peer`: can be an instance of [PeerInfo][], [PeerId][], [multiaddr][], or a multiaddr string
-- `callback`: Function with signature `function (err, conn) {}` where `conn` is a [Connection](https://github.com/libp2p/interface-connection) object
-
-`callback` is a function with the following `function (err, conn) {}` signature, where `err` is an Error in of failure to dial the connection and `conn` is a [Connection][] instance in case of a protocol selected, if not it is undefined.
+- `callback` following signature `function (err, conn) {}`, where `err` is an Error in of failure to dial the connection and `conn` is a [Connection][] instance in case of a protocol selected, if not it is undefined.
 
 #### `libp2p.dialProtocol(peer, protocol, callback)`
 
@@ -218,9 +263,17 @@ Required keys in the `options` object:
 
 - `peer`: can be an instance of [PeerInfo][], [PeerId][], [multiaddr][], or a multiaddr string
 - `protocol`: String that defines the protocol (e.g '/ipfs/bitswap/1.1.0')
-- `callback`: Function with signature `function (err, conn) {}` where `conn` is a [Connection](https://github.com/libp2p/interface-connection) object
+- `callback`: Function with signature `function (err, conn) {}`, where `conn` is a [Connection](https://github.com/libp2p/interface-connection) object
 
-`callback` is a function with the following `function (err, conn) {}` signature, where `err` is an Error in of failure to dial the connection and `conn` is a [Connection][] instance in case of a protocol selected, if not it is undefined.
+`callback` following signature `function (err, conn) {}`, where `err` is an Error in of failure to dial the connection and `conn` is a [Connection][] instance in case of a protocol selected, if not it is undefined.
+
+#### `libp2p.dialFSM(peer, protocol, callback)`
+
+> Behaves like `.dial` and `.dialProtocol` but calls back with a Connection State Machine
+
+- `peer`: can be an instance of [PeerInfo][], [PeerId][], [multiaddr][], or a multiaddr string
+- `protocol`: an optional String that defines the protocol (e.g '/ipfs/bitswap/1.1.0')
+- `callback`: following signature `function (err, connFSM) {}`, where `connFSM` is a [Connection State Machine](https://github.com/libp2p/js-libp2p-switch#connection-state-machine)
 
 #### `libp2p.hangUp(peer, callback)`
 
@@ -228,30 +281,33 @@ Required keys in the `options` object:
 
 - `peer`: can be an instance of [PeerInfo][], [PeerId][] or [multiaddr][]
 
-`callback` is a function with the following `function (err) {}` signature, where `err` is an Error in case stopping the node fails.
+`callback` following signature `function (err) {}`, where `err` is an Error in case stopping the node fails.
 
-#### `libp2p.peerRouting.findPeer(id, callback)`
+#### `libp2p.peerRouting.findPeer(id, options, callback)`
 
 > Looks up for multiaddrs of a peer in the DHT
 
 - `id`: instance of [PeerId][]
+- `options`: object of options
+- `options.maxTimeout`: Number milliseconds
 
-#### `libp2p.contentRouting.findProviders(key, timeout, callback)`
+#### `libp2p.contentRouting.findProviders(key, options, callback)`
 
 - `key`: Buffer
-- `timeout`: Number miliseconds
+- `options`: object of options
+- `options.maxTimeout`: Number milliseconds
+- `options.maxNumProviders` maximum number of providers to find
 
 #### `libp2p.contentRouting.provide(key, callback)`
 
 - `key`: Buffer
-
 
 #### `libp2p.handle(protocol, handlerFunc [, matchFunc])`
 
 > Handle new protocol
 
 - `protocol`: String that defines the protocol (e.g '/ipfs/bitswap/1.1.0')
-- `handlerFunc`: Function with signature `function (protocol, conn) {}` where `conn` is a [Connection](https://github.com/libp2p/interface-connection) object
+- `handlerFunc`: following signature `function (protocol, conn) {}`, where `conn` is a [Connection](https://github.com/libp2p/interface-connection) object
 - `matchFunc`: Function for matching on protocol (exact matching, semver, etc). Default to exact match.
 
 #### `libp2p.unhandle(protocol)`
@@ -260,21 +316,52 @@ Required keys in the `options` object:
 
 - `protocol`: String that defines the protocol (e.g '/ipfs/bitswap/1.1.0')
 
-#### `libp2p.on('peer:discovery', (peer) => {})`
+#### Events
+
+##### `libp2p.on('start', () => {})`
+
+> Libp2p has started, along with all its services.
+
+##### `libp2p.on('stop', () => {})`
+
+> Libp2p has stopped, along with all its services.
+
+##### `libp2p.on('error', (err) => {})`
+
+> An error has occurred
+
+- `err`: instance of `Error`
+
+##### `libp2p.on('peer:discovery', (peer) => {})`
 
 > Peer has been discovered.
 
-- `peer`: instance of [PeerInfo][]
-
-#### `libp2p.on('peer:connect', (peer) => {})`
-
-> We connected to a new peer
+If `autoDial` is `true`, applications should **not** attempt to connect to the peer
+unless they are performing a specific action. See [peer discovery and auto dial](./PEER_DISCOVERY.md) for more information.
 
 - `peer`: instance of [PeerInfo][]
 
-#### `libp2p.on('peer:disconnect', (peer) => {})`
+##### `libp2p.on('peer:connect', (peer) => {})`
 
-> We disconnected from Peer
+> We have a new muxed connection to a peer
+
+- `peer`: instance of [PeerInfo][]
+
+##### `libp2p.on('peer:disconnect', (peer) => {})`
+
+> We have closed a connection to a peer
+
+- `peer`: instance of [PeerInfo][]
+
+##### `libp2p.on('connection:start', (peer) => {})`
+
+> We created a new connection to a peer
+
+- `peer`: instance of [PeerInfo][]
+
+##### `libp2p.on('connection:end', (peer) => {})`
+
+> We closed a connection to a peer
 
 - `peer`: instance of [PeerInfo][]
 
@@ -307,14 +394,18 @@ Required keys in the `options` object:
 - `key`: Buffer
 - `value`: Buffer
 
-#### `libp2p.dht.get(key, callback)`
+#### `libp2p.dht.get(key, options, callback)`
 
 - `key`: Buffer
+- `options`: object of options
+- `options.maxTimeout`: Number milliseconds
 
-#### `libp2p.dht.getMany(key, nVals, callback)`
+#### `libp2p.dht.getMany(key, nVals, options, callback)`
 
 - `key`: Buffer
 - `nVals`: Number
+- `options`: object of options
+- `options.maxTimeout`: Number milliseconds
 
 [PeerInfo]: https://github.com/libp2p/js-peer-info
 [PeerId]: https://github.com/libp2p/js-peer-id
@@ -464,18 +555,6 @@ Some available network protectors:
 > npm run test:browser
 ```
 
-#### Run interop tests
-
-```sh
-N/A
-```
-
-#### Run benchmark tests
-
-```sh
-N/A
-```
-
 ### Packages
 
 List of packages currently in existence for libp2p
@@ -485,66 +564,66 @@ List of packages currently in existence for libp2p
 | Package | Version | Deps | CI | Coverage | Lead Maintainer |
 | ---------|---------|---------|---------|---------|--------- |
 | **Libp2p** |
-| [`interface-libp2p`](//github.com/libp2p/interface-libp2p) | [![npm](https://img.shields.io/npm/v/interface-libp2p.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/interface-libp2p/releases) | [![Deps](https://david-dm.org/libp2p/interface-libp2p.svg?style=flat-square)](https://david-dm.org/libp2p/interface-libp2p) | N/A | [![codecov](https://codecov.io/gh/libp2p/interface-libp2p/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/interface-libp2p) | N/A |
-| [`libp2p`](//github.com/libp2p/js-libp2p) | [![npm](https://img.shields.io/npm/v/libp2p.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p) | [Jacob Heun](mailto:jacobheun@gmail.com) |
+| [`interface-libp2p`](//github.com/libp2p/interface-libp2p) | [![npm](https://img.shields.io/npm/v/interface-libp2p.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/interface-libp2p/releases) | [![Deps](https://david-dm.org/libp2p/interface-libp2p.svg?style=flat-square)](https://david-dm.org/libp2p/interface-libp2p) | [![Travis CI](https://travis-ci.com/libp2p/interface-libp2p.svg?branch=master)](https://travis-ci.com/libp2p/interface-libp2p) | [![codecov](https://codecov.io/gh/libp2p/interface-libp2p/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/interface-libp2p) | N/A |
+| [`libp2p`](//github.com/libp2p/js-libp2p) | [![npm](https://img.shields.io/npm/v/libp2p.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p) | [Jacob Heun](mailto:jacobheun@gmail.com) |
 | **Connection** |
-| [`interface-connection`](//github.com/libp2p/interface-connection) | [![npm](https://img.shields.io/npm/v/interface-connection.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/interface-connection/releases) | [![Deps](https://david-dm.org/libp2p/interface-connection.svg?style=flat-square)](https://david-dm.org/libp2p/interface-connection) | N/A | [![codecov](https://codecov.io/gh/libp2p/interface-connection/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/interface-connection) | N/A |
+| [`interface-connection`](//github.com/libp2p/interface-connection) | [![npm](https://img.shields.io/npm/v/interface-connection.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/interface-connection/releases) | [![Deps](https://david-dm.org/libp2p/interface-connection.svg?style=flat-square)](https://david-dm.org/libp2p/interface-connection) | [![Travis CI](https://travis-ci.com/libp2p/interface-connection.svg?branch=master)](https://travis-ci.com/libp2p/interface-connection) | [![codecov](https://codecov.io/gh/libp2p/interface-connection/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/interface-connection) | [Jacob Heun](mailto:jacobheun@gmail.com) |
 | **Transport** |
-| [`interface-transport`](//github.com/libp2p/interface-transport) | [![npm](https://img.shields.io/npm/v/interface-transport.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/interface-transport/releases) | [![Deps](https://david-dm.org/libp2p/interface-transport.svg?style=flat-square)](https://david-dm.org/libp2p/interface-transport) | N/A | [![codecov](https://codecov.io/gh/libp2p/interface-transport/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/interface-transport) | N/A |
-| [`libp2p-tcp`](//github.com/libp2p/js-libp2p-tcp) | [![npm](https://img.shields.io/npm/v/libp2p-tcp.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-tcp/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-tcp.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-tcp) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p-tcp/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p-tcp/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-tcp/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-tcp) | [Jacob Heun](mailto:jacobheun@gmail.com) |
-| [`libp2p-udp`](//github.com/libp2p/js-libp2p-udp) | [![npm](https://img.shields.io/npm/v/libp2p-udp.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-udp/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-udp.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-udp) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-udp/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-udp) | N/A |
-| [`libp2p-udt`](//github.com/libp2p/js-libp2p-udt) | [![npm](https://img.shields.io/npm/v/libp2p-udt.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-udt/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-udt.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-udt) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-udt/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-udt) | N/A |
-| [`libp2p-utp`](//github.com/libp2p/js-libp2p-utp) | [![npm](https://img.shields.io/npm/v/libp2p-utp.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-utp/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-utp.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-utp) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p-utp/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p-utp/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-utp/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-utp) | N/A |
-| [`libp2p-webrtc-direct`](//github.com/libp2p/js-libp2p-webrtc-direct) | [![npm](https://img.shields.io/npm/v/libp2p-webrtc-direct.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-webrtc-direct/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-webrtc-direct.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-webrtc-direct) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p-webrtc-direct/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p-webrtc-direct/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-webrtc-direct/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-webrtc-direct) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
-| [`libp2p-webrtc-star`](//github.com/libp2p/js-libp2p-webrtc-star) | [![npm](https://img.shields.io/npm/v/libp2p-webrtc-star.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-webrtc-star/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-webrtc-star.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-webrtc-star) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p-webrtc-star/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p-webrtc-star/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-webrtc-star/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-webrtc-star) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
-| [`libp2p-websockets`](//github.com/libp2p/js-libp2p-websockets) | [![npm](https://img.shields.io/npm/v/libp2p-websockets.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-websockets/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-websockets.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-websockets) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-websockets/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-websockets) | N/A |
-| [`libp2p-websocket-star`](//github.com/libp2p/js-libp2p-websocket-star) | [![npm](https://img.shields.io/npm/v/libp2p-websocket-star.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-websocket-star/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-websocket-star.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-websocket-star) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-websocket-star/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-websocket-star) | [Jacob Heun](mailto:jacobheun@gmail.com) |
-| [`libp2p-websocket-star-rendezvous`](//github.com/libp2p/js-libp2p-websocket-star-rendezvous) | [![npm](https://img.shields.io/npm/v/libp2p-websocket-star-rendezvous.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-websocket-star-rendezvous/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-websocket-star-rendezvous.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-websocket-star-rendezvous) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-websocket-star-rendezvous/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-websocket-star-rendezvous) | N/A |
+| [`interface-transport`](//github.com/libp2p/interface-transport) | [![npm](https://img.shields.io/npm/v/interface-transport.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/interface-transport/releases) | [![Deps](https://david-dm.org/libp2p/interface-transport.svg?style=flat-square)](https://david-dm.org/libp2p/interface-transport) | [![Travis CI](https://travis-ci.com/libp2p/interface-transport.svg?branch=master)](https://travis-ci.com/libp2p/interface-transport) | [![codecov](https://codecov.io/gh/libp2p/interface-transport/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/interface-transport) | [Jacob Heun](mailto:jacobheun@gmail.com) |
+| [`libp2p-tcp`](//github.com/libp2p/js-libp2p-tcp) | [![npm](https://img.shields.io/npm/v/libp2p-tcp.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-tcp/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-tcp.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-tcp) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-tcp.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-tcp) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-tcp/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-tcp) | [Jacob Heun](mailto:jacobheun@gmail.com) |
+| [`libp2p-udp`](//github.com/libp2p/js-libp2p-udp) | [![npm](https://img.shields.io/npm/v/libp2p-udp.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-udp/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-udp.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-udp) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-udp.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-udp) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-udp/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-udp) | N/A |
+| [`libp2p-udt`](//github.com/libp2p/js-libp2p-udt) | [![npm](https://img.shields.io/npm/v/libp2p-udt.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-udt/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-udt.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-udt) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-udt.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-udt) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-udt/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-udt) | N/A |
+| [`libp2p-utp`](//github.com/libp2p/js-libp2p-utp) | [![npm](https://img.shields.io/npm/v/libp2p-utp.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-utp/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-utp.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-utp) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-utp.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-utp) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-utp/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-utp) | N/A |
+| [`libp2p-webrtc-direct`](//github.com/libp2p/js-libp2p-webrtc-direct) | [![npm](https://img.shields.io/npm/v/libp2p-webrtc-direct.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-webrtc-direct/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-webrtc-direct.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-webrtc-direct) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-webrtc-direct.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-webrtc-direct) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-webrtc-direct/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-webrtc-direct) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
+| [`libp2p-webrtc-star`](//github.com/libp2p/js-libp2p-webrtc-star) | [![npm](https://img.shields.io/npm/v/libp2p-webrtc-star.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-webrtc-star/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-webrtc-star.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-webrtc-star) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-webrtc-star.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-webrtc-star) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-webrtc-star/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-webrtc-star) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
+| [`libp2p-websockets`](//github.com/libp2p/js-libp2p-websockets) | [![npm](https://img.shields.io/npm/v/libp2p-websockets.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-websockets/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-websockets.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-websockets) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-websockets.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-websockets) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-websockets/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-websockets) | [Jacob Heun](mailto:jacobheun@gmail.com) |
+| [`libp2p-websocket-star`](//github.com/libp2p/js-libp2p-websocket-star) | [![npm](https://img.shields.io/npm/v/libp2p-websocket-star.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-websocket-star/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-websocket-star.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-websocket-star) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-websocket-star.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-websocket-star) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-websocket-star/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-websocket-star) | [Jacob Heun](mailto:jacobheun@gmail.com) |
+| [`libp2p-websocket-star-rendezvous`](//github.com/libp2p/js-libp2p-websocket-star-rendezvous) | [![npm](https://img.shields.io/npm/v/libp2p-websocket-star-rendezvous.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-websocket-star-rendezvous/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-websocket-star-rendezvous.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-websocket-star-rendezvous) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-websocket-star-rendezvous.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-websocket-star-rendezvous) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-websocket-star-rendezvous/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-websocket-star-rendezvous) | [Jacob Heun](mailto:jacobheun@gmail.com) |
 | **Crypto Channels** |
-| [`libp2p-secio`](//github.com/libp2p/js-libp2p-secio) | [![npm](https://img.shields.io/npm/v/libp2p-secio.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-secio/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-secio.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-secio) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-secio/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-secio) | N/A |
+| [`libp2p-secio`](//github.com/libp2p/js-libp2p-secio) | [![npm](https://img.shields.io/npm/v/libp2p-secio.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-secio/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-secio.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-secio) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-secio.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-secio) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-secio/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-secio) | [Friedel Ziegelmayer](mailto:dignifiedquire@gmail.com) |
 | **Stream Muxers** |
-| [`interface-stream-muxer`](//github.com/libp2p/interface-stream-muxer) | [![npm](https://img.shields.io/npm/v/interface-stream-muxer.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/interface-stream-muxer/releases) | [![Deps](https://david-dm.org/libp2p/interface-stream-muxer.svg?style=flat-square)](https://david-dm.org/libp2p/interface-stream-muxer) | N/A | [![codecov](https://codecov.io/gh/libp2p/interface-stream-muxer/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/interface-stream-muxer) | N/A |
-| [`libp2p-mplex`](//github.com/libp2p/js-libp2p-mplex) | [![npm](https://img.shields.io/npm/v/libp2p-mplex.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-mplex/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-mplex.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-mplex) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-mplex/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-mplex) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
-| [`libp2p-spdy`](//github.com/libp2p/js-libp2p-spdy) | [![npm](https://img.shields.io/npm/v/libp2p-spdy.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-spdy/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-spdy.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-spdy) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p-spdy/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p-spdy/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-spdy/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-spdy) | N/A |
+| [`interface-stream-muxer`](//github.com/libp2p/interface-stream-muxer) | [![npm](https://img.shields.io/npm/v/interface-stream-muxer.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/interface-stream-muxer/releases) | [![Deps](https://david-dm.org/libp2p/interface-stream-muxer.svg?style=flat-square)](https://david-dm.org/libp2p/interface-stream-muxer) | [![Travis CI](https://travis-ci.com/libp2p/interface-stream-muxer.svg?branch=master)](https://travis-ci.com/libp2p/interface-stream-muxer) | [![codecov](https://codecov.io/gh/libp2p/interface-stream-muxer/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/interface-stream-muxer) | [Jacob Heun](mailto:jacobheun@gmail.com) |
+| [`libp2p-mplex`](//github.com/libp2p/js-libp2p-mplex) | [![npm](https://img.shields.io/npm/v/libp2p-mplex.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-mplex/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-mplex.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-mplex) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-mplex.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-mplex) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-mplex/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-mplex) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
+| [`libp2p-spdy`](//github.com/libp2p/js-libp2p-spdy) | [![npm](https://img.shields.io/npm/v/libp2p-spdy.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-spdy/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-spdy.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-spdy) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-spdy.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-spdy) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-spdy/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-spdy) | [Jacob Heun](mailto:jacobheun@gmail.com) |
 | **Discovery** |
-| [`interface-peer-discovery`](//github.com/libp2p/interface-peer-discovery) | [![npm](https://img.shields.io/npm/v/interface-peer-discovery.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/interface-peer-discovery/releases) | [![Deps](https://david-dm.org/libp2p/interface-peer-discovery.svg?style=flat-square)](https://david-dm.org/libp2p/interface-peer-discovery) | N/A | [![codecov](https://codecov.io/gh/libp2p/interface-peer-discovery/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/interface-peer-discovery) | N/A |
-| [`libp2p-bootstrap`](//github.com/libp2p/js-libp2p-bootstrap) | [![npm](https://img.shields.io/npm/v/libp2p-bootstrap.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-bootstrap/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-bootstrap.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-bootstrap) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p-bootstrap/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p-bootstrap/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-bootstrap/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-bootstrap) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
-| [`libp2p-kad-dht`](//github.com/libp2p/js-libp2p-kad-dht) | [![npm](https://img.shields.io/npm/v/libp2p-kad-dht.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-kad-dht/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-kad-dht.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-kad-dht) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p-kad-dht/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p-kad-dht/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-kad-dht/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-kad-dht) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
-| [`libp2p-mdns`](//github.com/libp2p/js-libp2p-mdns) | [![npm](https://img.shields.io/npm/v/libp2p-mdns.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-mdns/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-mdns.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-mdns) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p-mdns/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p-mdns/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-mdns/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-mdns) | N/A |
-| [`libp2p-rendezvous`](//github.com/libp2p/js-libp2p-rendezvous) | [![npm](https://img.shields.io/npm/v/libp2p-rendezvous.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-rendezvous/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-rendezvous.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-rendezvous) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-rendezvous/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-rendezvous) | N/A |
-| [`libp2p-webrtc-star`](//github.com/libp2p/js-libp2p-webrtc-star) | [![npm](https://img.shields.io/npm/v/libp2p-webrtc-star.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-webrtc-star/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-webrtc-star.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-webrtc-star) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p-webrtc-star/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p-webrtc-star/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-webrtc-star/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-webrtc-star) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
-| [`libp2p-websocket-star`](//github.com/libp2p/js-libp2p-websocket-star) | [![npm](https://img.shields.io/npm/v/libp2p-websocket-star.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-websocket-star/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-websocket-star.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-websocket-star) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-websocket-star/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-websocket-star) | [Jacob Heun](mailto:jacobheun@gmail.com) |
+| [`interface-peer-discovery`](//github.com/libp2p/interface-peer-discovery) | [![npm](https://img.shields.io/npm/v/interface-peer-discovery.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/interface-peer-discovery/releases) | [![Deps](https://david-dm.org/libp2p/interface-peer-discovery.svg?style=flat-square)](https://david-dm.org/libp2p/interface-peer-discovery) | [![Travis CI](https://travis-ci.com/libp2p/interface-peer-discovery.svg?branch=master)](https://travis-ci.com/libp2p/interface-peer-discovery) | [![codecov](https://codecov.io/gh/libp2p/interface-peer-discovery/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/interface-peer-discovery) | N/A |
+| [`libp2p-bootstrap`](//github.com/libp2p/js-libp2p-bootstrap) | [![npm](https://img.shields.io/npm/v/libp2p-bootstrap.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-bootstrap/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-bootstrap.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-bootstrap) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-bootstrap.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-bootstrap) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-bootstrap/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-bootstrap) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
+| [`libp2p-kad-dht`](//github.com/libp2p/js-libp2p-kad-dht) | [![npm](https://img.shields.io/npm/v/libp2p-kad-dht.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-kad-dht/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-kad-dht.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-kad-dht) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-kad-dht.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-kad-dht) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-kad-dht/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-kad-dht) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
+| [`libp2p-mdns`](//github.com/libp2p/js-libp2p-mdns) | [![npm](https://img.shields.io/npm/v/libp2p-mdns.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-mdns/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-mdns.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-mdns) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-mdns.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-mdns) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-mdns/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-mdns) | [Jacob Heun](mailto:jacobheun@gmail.com) |
+| [`libp2p-rendezvous`](//github.com/libp2p/js-libp2p-rendezvous) | [![npm](https://img.shields.io/npm/v/libp2p-rendezvous.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-rendezvous/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-rendezvous.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-rendezvous) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-rendezvous.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-rendezvous) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-rendezvous/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-rendezvous) | N/A |
+| [`libp2p-webrtc-star`](//github.com/libp2p/js-libp2p-webrtc-star) | [![npm](https://img.shields.io/npm/v/libp2p-webrtc-star.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-webrtc-star/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-webrtc-star.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-webrtc-star) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-webrtc-star.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-webrtc-star) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-webrtc-star/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-webrtc-star) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
+| [`libp2p-websocket-star`](//github.com/libp2p/js-libp2p-websocket-star) | [![npm](https://img.shields.io/npm/v/libp2p-websocket-star.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-websocket-star/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-websocket-star.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-websocket-star) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-websocket-star.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-websocket-star) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-websocket-star/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-websocket-star) | [Jacob Heun](mailto:jacobheun@gmail.com) |
 | **NAT Traversal** |
-| [`libp2p-circuit`](//github.com/libp2p/js-libp2p-circuit) | [![npm](https://img.shields.io/npm/v/libp2p-circuit.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-circuit/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-circuit.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-circuit) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p-circuit/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p-circuit/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-circuit/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-circuit) | [Jacob Heun](mailto:jacobheun@gmail.com) |
-| [`libp2p-nat-mngr`](//github.com/libp2p/js-libp2p-nat-mngr) | [![npm](https://img.shields.io/npm/v/libp2p-nat-mngr.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-nat-mngr/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-nat-mngr.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-nat-mngr) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-nat-mngr/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-nat-mngr) | N/A |
+| [`libp2p-circuit`](//github.com/libp2p/js-libp2p-circuit) | [![npm](https://img.shields.io/npm/v/libp2p-circuit.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-circuit/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-circuit.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-circuit) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-circuit.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-circuit) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-circuit/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-circuit) | [Jacob Heun](mailto:jacobheun@gmail.com) |
+| [`libp2p-nat-mngr`](//github.com/libp2p/js-libp2p-nat-mngr) | [![npm](https://img.shields.io/npm/v/libp2p-nat-mngr.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-nat-mngr/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-nat-mngr.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-nat-mngr) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-nat-mngr.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-nat-mngr) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-nat-mngr/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-nat-mngr) | N/A |
 | **Data Types** |
-| [`peer-book`](//github.com/libp2p/js-peer-book) | [![npm](https://img.shields.io/npm/v/peer-book.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-peer-book/releases) | [![Deps](https://david-dm.org/libp2p/js-peer-book.svg?style=flat-square)](https://david-dm.org/libp2p/js-peer-book) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-peer-book/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-peer-book) | [Pedro Teixeira](mailto:i@pgte.me) |
-| [`peer-id`](//github.com/libp2p/js-peer-id) | [![npm](https://img.shields.io/npm/v/peer-id.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-peer-id/releases) | [![Deps](https://david-dm.org/libp2p/js-peer-id.svg?style=flat-square)](https://david-dm.org/libp2p/js-peer-id) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-peer-id/master)](https://ci.ipfs.team/job/libp2p/job/js-peer-id/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-peer-id/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-peer-id) | [Pedro Teixeira](mailto:i@pgte.me) |
-| [`peer-info`](//github.com/libp2p/js-peer-info) | [![npm](https://img.shields.io/npm/v/peer-info.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-peer-info/releases) | [![Deps](https://david-dm.org/libp2p/js-peer-info.svg?style=flat-square)](https://david-dm.org/libp2p/js-peer-info) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-peer-info/master)](https://ci.ipfs.team/job/libp2p/job/js-peer-info/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-peer-info/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-peer-info) | N/A |
+| [`peer-book`](//github.com/libp2p/js-peer-book) | [![npm](https://img.shields.io/npm/v/peer-book.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-peer-book/releases) | [![Deps](https://david-dm.org/libp2p/js-peer-book.svg?style=flat-square)](https://david-dm.org/libp2p/js-peer-book) | [![Travis CI](https://travis-ci.com/libp2p/js-peer-book.svg?branch=master)](https://travis-ci.com/libp2p/js-peer-book) | [![codecov](https://codecov.io/gh/libp2p/js-peer-book/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-peer-book) | [Pedro Teixeira](mailto:i@pgte.me) |
+| [`peer-id`](//github.com/libp2p/js-peer-id) | [![npm](https://img.shields.io/npm/v/peer-id.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-peer-id/releases) | [![Deps](https://david-dm.org/libp2p/js-peer-id.svg?style=flat-square)](https://david-dm.org/libp2p/js-peer-id) | [![Travis CI](https://travis-ci.com/libp2p/js-peer-id.svg?branch=master)](https://travis-ci.com/libp2p/js-peer-id) | [![codecov](https://codecov.io/gh/libp2p/js-peer-id/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-peer-id) | [Pedro Teixeira](mailto:i@pgte.me) |
+| [`peer-info`](//github.com/libp2p/js-peer-info) | [![npm](https://img.shields.io/npm/v/peer-info.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-peer-info/releases) | [![Deps](https://david-dm.org/libp2p/js-peer-info.svg?style=flat-square)](https://david-dm.org/libp2p/js-peer-info) | [![Travis CI](https://travis-ci.com/libp2p/js-peer-info.svg?branch=master)](https://travis-ci.com/libp2p/js-peer-info) | [![codecov](https://codecov.io/gh/libp2p/js-peer-info/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-peer-info) | [Pedro Teixeira](mailto:i@pgte.me) |
 | **Content Routing** |
-| [`interface-content-routing`](//github.com/libp2p/interface-content-routing) | [![npm](https://img.shields.io/npm/v/interface-content-routing.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/interface-content-routing/releases) | [![Deps](https://david-dm.org/libp2p/interface-content-routing.svg?style=flat-square)](https://david-dm.org/libp2p/interface-content-routing) | N/A | [![codecov](https://codecov.io/gh/libp2p/interface-content-routing/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/interface-content-routing) | N/A |
-| [`libp2p-delegated-content-routing`](//github.com/libp2p/js-libp2p-delegated-content-routing) | [![npm](https://img.shields.io/npm/v/libp2p-delegated-content-routing.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-delegated-content-routing/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-delegated-content-routing.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-delegated-content-routing) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-delegated-content-routing/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-delegated-content-routing) | [Jacob Heun](mailto:jacobheun@gmail.com) |
-| [`libp2p-kad-dht`](//github.com/libp2p/js-libp2p-kad-dht) | [![npm](https://img.shields.io/npm/v/libp2p-kad-dht.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-kad-dht/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-kad-dht.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-kad-dht) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p-kad-dht/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p-kad-dht/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-kad-dht/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-kad-dht) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
+| [`interface-content-routing`](//github.com/libp2p/interface-content-routing) | [![npm](https://img.shields.io/npm/v/interface-content-routing.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/interface-content-routing/releases) | [![Deps](https://david-dm.org/libp2p/interface-content-routing.svg?style=flat-square)](https://david-dm.org/libp2p/interface-content-routing) | [![Travis CI](https://travis-ci.com/libp2p/interface-content-routing.svg?branch=master)](https://travis-ci.com/libp2p/interface-content-routing) | [![codecov](https://codecov.io/gh/libp2p/interface-content-routing/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/interface-content-routing) | N/A |
+| [`libp2p-delegated-content-routing`](//github.com/libp2p/js-libp2p-delegated-content-routing) | [![npm](https://img.shields.io/npm/v/libp2p-delegated-content-routing.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-delegated-content-routing/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-delegated-content-routing.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-delegated-content-routing) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-delegated-content-routing.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-delegated-content-routing) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-delegated-content-routing/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-delegated-content-routing) | [Jacob Heun](mailto:jacobheun@gmail.com) |
+| [`libp2p-kad-dht`](//github.com/libp2p/js-libp2p-kad-dht) | [![npm](https://img.shields.io/npm/v/libp2p-kad-dht.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-kad-dht/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-kad-dht.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-kad-dht) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-kad-dht.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-kad-dht) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-kad-dht/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-kad-dht) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
 | **Peer Routing** |
-| [`interface-peer-routing`](//github.com/libp2p/interface-peer-routing) | [![npm](https://img.shields.io/npm/v/interface-peer-routing.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/interface-peer-routing/releases) | [![Deps](https://david-dm.org/libp2p/interface-peer-routing.svg?style=flat-square)](https://david-dm.org/libp2p/interface-peer-routing) | N/A | [![codecov](https://codecov.io/gh/libp2p/interface-peer-routing/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/interface-peer-routing) | N/A |
-| [`libp2p-delegated-peer-routing`](//github.com/libp2p/js-libp2p-delegated-peer-routing) | [![npm](https://img.shields.io/npm/v/libp2p-delegated-peer-routing.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-delegated-peer-routing/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-delegated-peer-routing.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-delegated-peer-routing) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-delegated-peer-routing/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-delegated-peer-routing) | [Jacob Heun](mailto:jacobheun@gmail.com) |
-| [`libp2p-kad-dht`](//github.com/libp2p/js-libp2p-kad-dht) | [![npm](https://img.shields.io/npm/v/libp2p-kad-dht.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-kad-dht/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-kad-dht.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-kad-dht) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p-kad-dht/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p-kad-dht/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-kad-dht/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-kad-dht) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
+| [`interface-peer-routing`](//github.com/libp2p/interface-peer-routing) | [![npm](https://img.shields.io/npm/v/interface-peer-routing.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/interface-peer-routing/releases) | [![Deps](https://david-dm.org/libp2p/interface-peer-routing.svg?style=flat-square)](https://david-dm.org/libp2p/interface-peer-routing) | [![Travis CI](https://travis-ci.com/libp2p/interface-peer-routing.svg?branch=master)](https://travis-ci.com/libp2p/interface-peer-routing) | [![codecov](https://codecov.io/gh/libp2p/interface-peer-routing/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/interface-peer-routing) | N/A |
+| [`libp2p-delegated-peer-routing`](//github.com/libp2p/js-libp2p-delegated-peer-routing) | [![npm](https://img.shields.io/npm/v/libp2p-delegated-peer-routing.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-delegated-peer-routing/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-delegated-peer-routing.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-delegated-peer-routing) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-delegated-peer-routing.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-delegated-peer-routing) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-delegated-peer-routing/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-delegated-peer-routing) | [Jacob Heun](mailto:jacobheun@gmail.com) |
+| [`libp2p-kad-dht`](//github.com/libp2p/js-libp2p-kad-dht) | [![npm](https://img.shields.io/npm/v/libp2p-kad-dht.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-kad-dht/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-kad-dht.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-kad-dht) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-kad-dht.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-kad-dht) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-kad-dht/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-kad-dht) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
 | **Record Store** |
-| [`interface-record-store`](//github.com/libp2p/interface-record-store) | [![npm](https://img.shields.io/npm/v/interface-record-store.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/interface-record-store/releases) | [![Deps](https://david-dm.org/libp2p/interface-record-store.svg?style=flat-square)](https://david-dm.org/libp2p/interface-record-store) | N/A | [![codecov](https://codecov.io/gh/libp2p/interface-record-store/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/interface-record-store) | N/A |
-| [`libp2p-record`](//github.com/libp2p/js-libp2p-record) | [![npm](https://img.shields.io/npm/v/libp2p-record.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-record/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-record.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-record) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p-record/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p-record/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-record/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-record) | N/A |
+| [`interface-record-store`](//github.com/libp2p/interface-record-store) | [![npm](https://img.shields.io/npm/v/interface-record-store.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/interface-record-store/releases) | [![Deps](https://david-dm.org/libp2p/interface-record-store.svg?style=flat-square)](https://david-dm.org/libp2p/interface-record-store) | [![Travis CI](https://travis-ci.com/libp2p/interface-record-store.svg?branch=master)](https://travis-ci.com/libp2p/interface-record-store) | [![codecov](https://codecov.io/gh/libp2p/interface-record-store/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/interface-record-store) | N/A |
+| [`libp2p-record`](//github.com/libp2p/js-libp2p-record) | [![npm](https://img.shields.io/npm/v/libp2p-record.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-record/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-record.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-record) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-record.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-record) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-record/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-record) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
 | **Generics** |
-| [`libp2p-connection-manager`](//github.com/libp2p/js-libp2p-connection-manager) | [![npm](https://img.shields.io/npm/v/libp2p-connection-manager.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-connection-manager/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-connection-manager.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-connection-manager) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-connection-manager/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-connection-manager) | N/A |
-| [`libp2p-crypto`](//github.com/libp2p/js-libp2p-crypto) | [![npm](https://img.shields.io/npm/v/libp2p-crypto.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-crypto/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-crypto.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-crypto) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p-crypto/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p-crypto/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-crypto/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-crypto) | [Friedel Ziegelmayer](mailto:dignifiedquire@gmail.com) |
-| [`libp2p-crypto-secp256k1`](//github.com/libp2p/js-libp2p-crypto-secp256k1) | [![npm](https://img.shields.io/npm/v/libp2p-crypto-secp256k1.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-crypto-secp256k1/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-crypto-secp256k1.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-crypto-secp256k1) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p-crypto-secp256k1/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p-crypto-secp256k1/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-crypto-secp256k1/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-crypto-secp256k1) | N/A |
-| [`libp2p-switch`](//github.com/libp2p/js-libp2p-switch) | [![npm](https://img.shields.io/npm/v/libp2p-switch.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-switch/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-switch.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-switch) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p-switch/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p-switch/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-switch/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-switch) | [Jacob Heun](mailto:jacobheun@gmail.com) |
+| [`libp2p-connection-manager`](//github.com/libp2p/js-libp2p-connection-manager) | [![npm](https://img.shields.io/npm/v/libp2p-connection-manager.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-connection-manager/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-connection-manager.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-connection-manager) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-connection-manager.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-connection-manager) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-connection-manager/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-connection-manager) | N/A |
+| [`libp2p-crypto`](//github.com/libp2p/js-libp2p-crypto) | [![npm](https://img.shields.io/npm/v/libp2p-crypto.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-crypto/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-crypto.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-crypto) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-crypto.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-crypto) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-crypto/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-crypto) | [Friedel Ziegelmayer](mailto:dignifiedquire@gmail.com) |
+| [`libp2p-crypto-secp256k1`](//github.com/libp2p/js-libp2p-crypto-secp256k1) | [![npm](https://img.shields.io/npm/v/libp2p-crypto-secp256k1.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-crypto-secp256k1/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-crypto-secp256k1.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-crypto-secp256k1) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-crypto-secp256k1.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-crypto-secp256k1) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-crypto-secp256k1/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-crypto-secp256k1) | [Friedel Ziegelmayer](mailto:dignifiedquire@gmail.com) |
+| [`libp2p-switch`](//github.com/libp2p/js-libp2p-switch) | [![npm](https://img.shields.io/npm/v/libp2p-switch.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-switch/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-switch.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-switch) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-switch.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-switch) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-switch/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-switch) | [Jacob Heun](mailto:jacobheun@gmail.com) |
 | **Extensions** |
-| [`libp2p-floodsub`](//github.com/libp2p/js-libp2p-floodsub) | [![npm](https://img.shields.io/npm/v/libp2p-floodsub.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-floodsub/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-floodsub.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-floodsub) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-floodsub/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-floodsub) | N/A |
-| [`libp2p-identify`](//github.com/libp2p/js-libp2p-identify) | [![npm](https://img.shields.io/npm/v/libp2p-identify.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-identify/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-identify.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-identify) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-identify/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-identify) | [Jacob Heun](mailto:jacobheun@gmail.com) |
-| [`libp2p-keychain`](//github.com/libp2p/js-libp2p-keychain) | [![npm](https://img.shields.io/npm/v/libp2p-keychain.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-keychain/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-keychain.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-keychain) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-keychain/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-keychain) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
-| [`libp2p-ping`](//github.com/libp2p/js-libp2p-ping) | [![npm](https://img.shields.io/npm/v/libp2p-ping.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-ping/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-ping.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-ping) | [![jenkins](https://ci.ipfs.team/buildStatus/icon?job=libp2p/js-libp2p-ping/master)](https://ci.ipfs.team/job/libp2p/job/js-libp2p-ping/job/master/) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-ping/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-ping) | N/A |
-| [`libp2p-pnet`](//github.com/libp2p/js-libp2p-pnet) | [![npm](https://img.shields.io/npm/v/libp2p-pnet.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-pnet/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-pnet.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-pnet) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-pnet/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-pnet) | [Jacob Heun](mailto:jacobheun@gmail.com) |
+| [`libp2p-floodsub`](//github.com/libp2p/js-libp2p-floodsub) | [![npm](https://img.shields.io/npm/v/libp2p-floodsub.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-floodsub/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-floodsub.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-floodsub) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-floodsub.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-floodsub) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-floodsub/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-floodsub) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
+| [`libp2p-identify`](//github.com/libp2p/js-libp2p-identify) | [![npm](https://img.shields.io/npm/v/libp2p-identify.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-identify/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-identify.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-identify) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-identify.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-identify) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-identify/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-identify) | [Jacob Heun](mailto:jacobheun@gmail.com) |
+| [`libp2p-keychain`](//github.com/libp2p/js-libp2p-keychain) | [![npm](https://img.shields.io/npm/v/libp2p-keychain.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-keychain/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-keychain.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-keychain) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-keychain.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-keychain) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-keychain/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-keychain) | [Vasco Santos](mailto:vasco.santos@moxy.studio) |
+| [`libp2p-ping`](//github.com/libp2p/js-libp2p-ping) | [![npm](https://img.shields.io/npm/v/libp2p-ping.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-ping/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-ping.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-ping) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-ping.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-ping) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-ping/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-ping) | [Jacob Heun](mailto:jacobheun@gmail.com) |
+| [`libp2p-pnet`](//github.com/libp2p/js-libp2p-pnet) | [![npm](https://img.shields.io/npm/v/libp2p-pnet.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-libp2p-pnet/releases) | [![Deps](https://david-dm.org/libp2p/js-libp2p-pnet.svg?style=flat-square)](https://david-dm.org/libp2p/js-libp2p-pnet) | [![Travis CI](https://travis-ci.com/libp2p/js-libp2p-pnet.svg?branch=master)](https://travis-ci.com/libp2p/js-libp2p-pnet) | [![codecov](https://codecov.io/gh/libp2p/js-libp2p-pnet/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-libp2p-pnet) | [Jacob Heun](mailto:jacobheun@gmail.com) |
 | **Utilities** |
-| [`p2pcat`](//github.com/libp2p/js-p2pcat) | [![npm](https://img.shields.io/npm/v/p2pcat.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-p2pcat/releases) | [![Deps](https://david-dm.org/libp2p/js-p2pcat.svg?style=flat-square)](https://david-dm.org/libp2p/js-p2pcat) | N/A | [![codecov](https://codecov.io/gh/libp2p/js-p2pcat/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-p2pcat) | N/A |
+| [`p2pcat`](//github.com/libp2p/js-p2pcat) | [![npm](https://img.shields.io/npm/v/p2pcat.svg?maxAge=86400&style=flat-square)](//github.com/libp2p/js-p2pcat/releases) | [![Deps](https://david-dm.org/libp2p/js-p2pcat.svg?style=flat-square)](https://david-dm.org/libp2p/js-p2pcat) | [![Travis CI](https://travis-ci.com/libp2p/js-p2pcat.svg?branch=master)](https://travis-ci.com/libp2p/js-p2pcat) | [![codecov](https://codecov.io/gh/libp2p/js-p2pcat/branch/master/graph/badge.svg)](https://codecov.io/gh/libp2p/js-p2pcat) | N/A |
 
 ## Contribute
 
@@ -556,4 +635,4 @@ The libp2p implementation in JavaScript is a work in progress. As such, there ar
 
 ## License
 
-[MIT](LICENSE) © David Dias
+[MIT](LICENSE) © Protocol Labs

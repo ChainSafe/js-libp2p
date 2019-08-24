@@ -1,77 +1,130 @@
 'use strict'
 
-const setImmediate = require('async/setImmediate')
-const NOT_STARTED_YET = require('./error-messages').NOT_STARTED_YET
-const FloodSub = require('libp2p-floodsub')
+const nextTick = require('async/nextTick')
+const { messages, codes } = require('./errors')
+const promisify = require('promisify-es6')
 
-module.exports = (node) => {
-  const floodSub = new FloodSub(node)
+const errCode = require('err-code')
 
-  node._floodSub = floodSub
+module.exports = (node, Pubsub, config) => {
+  const pubsub = new Pubsub(node, config)
 
   return {
-    subscribe: (topic, options, handler, callback) => {
+    /**
+     * Subscribe the given handler to a pubsub topic
+     *
+     * @param {string} topic
+     * @param {function} handler The handler to subscribe
+     * @param {object|null} [options]
+     * @param {function} [callback] An optional callback
+     *
+     * @returns {Promise|void} A promise is returned if no callback is provided
+     *
+     * @example <caption>Subscribe a handler to a topic</caption>
+     *
+     * // `null` must be passed for options until subscribe is no longer using promisify
+     * const handler = (message) => { }
+     * await libp2p.subscribe(topic, handler, null)
+     *
+     * @example <caption>Use a callback instead of the Promise api</caption>
+     *
+     * // `options` may be passed or omitted when supplying a callback
+     * const handler = (message) => { }
+     * libp2p.subscribe(topic, handler, callback)
+     */
+    subscribe: promisify((topic, handler, options, callback) => {
       if (typeof options === 'function') {
-        callback = handler
-        handler = options
+        callback = options
         options = {}
       }
 
-      if (!node.isStarted() && !floodSub.started) {
-        return setImmediate(() => callback(new Error(NOT_STARTED_YET)))
+      if (!node.isStarted() && !pubsub.started) {
+        return nextTick(callback, errCode(new Error(messages.NOT_STARTED_YET), codes.PUBSUB_NOT_STARTED))
       }
 
       function subscribe (cb) {
-        if (floodSub.listenerCount(topic) === 0) {
-          floodSub.subscribe(topic)
+        if (pubsub.listenerCount(topic) === 0) {
+          pubsub.subscribe(topic)
         }
 
-        floodSub.on(topic, handler)
-        setImmediate(cb)
+        pubsub.on(topic, handler)
+        nextTick(cb)
       }
 
       subscribe(callback)
-    },
+    }),
 
-    unsubscribe: (topic, handler) => {
-      if (!node.isStarted() && !floodSub.started) {
-        throw new Error(NOT_STARTED_YET)
+    /**
+     * Unsubscribes from a pubsub topic
+     *
+     * @param {string} topic
+     * @param {function|null} handler The handler to unsubscribe from
+     * @param {function} [callback] An optional callback
+     *
+     * @returns {Promise|void} A promise is returned if no callback is provided
+     *
+     * @example <caption>Unsubscribe a topic for all handlers</caption>
+     *
+     * // `null` must be passed until unsubscribe is no longer using promisify
+     * await libp2p.unsubscribe(topic, null)
+     *
+     * @example <caption>Unsubscribe a topic for 1 handler</caption>
+     *
+     * await libp2p.unsubscribe(topic, handler)
+     *
+     * @example <caption>Use a callback instead of the Promise api</caption>
+     *
+     * libp2p.unsubscribe(topic, handler, callback)
+     */
+    unsubscribe: promisify((topic, handler, callback) => {
+      if (!node.isStarted() && !pubsub.started) {
+        return nextTick(callback, errCode(new Error(messages.NOT_STARTED_YET), codes.PUBSUB_NOT_STARTED))
       }
 
-      floodSub.removeListener(topic, handler)
-
-      if (floodSub.listenerCount(topic) === 0) {
-        floodSub.unsubscribe(topic)
-      }
-    },
-
-    publish: (topic, data, callback) => {
-      if (!node.isStarted() && !floodSub.started) {
-        return setImmediate(() => callback(new Error(NOT_STARTED_YET)))
+      if (!handler) {
+        pubsub.removeAllListeners(topic)
+      } else {
+        pubsub.removeListener(topic, handler)
       }
 
-      if (!Buffer.isBuffer(data)) {
-        return setImmediate(() => callback(new Error('data must be a Buffer')))
+      if (pubsub.listenerCount(topic) === 0) {
+        pubsub.unsubscribe(topic)
       }
 
-      floodSub.publish(topic, data)
-
-      setImmediate(() => callback())
-    },
-
-    ls: (callback) => {
-      if (!node.isStarted() && !floodSub.started) {
-        return setImmediate(() => callback(new Error(NOT_STARTED_YET)))
+      if (typeof callback === 'function') {
+        return nextTick(() => callback())
       }
 
-      const subscriptions = Array.from(floodSub.subscriptions)
+      return Promise.resolve()
+    }),
 
-      setImmediate(() => callback(null, subscriptions))
-    },
+    publish: promisify((topic, data, callback) => {
+      if (!node.isStarted() && !pubsub.started) {
+        return nextTick(callback, errCode(new Error(messages.NOT_STARTED_YET), codes.PUBSUB_NOT_STARTED))
+      }
 
-    peers: (topic, callback) => {
-      if (!node.isStarted() && !floodSub.started) {
-        return setImmediate(() => callback(new Error(NOT_STARTED_YET)))
+      try {
+        data = Buffer.from(data)
+      } catch (err) {
+        return nextTick(callback, errCode(new Error('data must be convertible to a Buffer'), 'ERR_DATA_IS_NOT_VALID'))
+      }
+
+      pubsub.publish(topic, data, callback)
+    }),
+
+    ls: promisify((callback) => {
+      if (!node.isStarted() && !pubsub.started) {
+        return nextTick(callback, errCode(new Error(messages.NOT_STARTED_YET), codes.PUBSUB_NOT_STARTED))
+      }
+
+      const subscriptions = Array.from(pubsub.subscriptions)
+
+      nextTick(() => callback(null, subscriptions))
+    }),
+
+    peers: promisify((topic, callback) => {
+      if (!node.isStarted() && !pubsub.started) {
+        return nextTick(callback, errCode(new Error(messages.NOT_STARTED_YET), codes.PUBSUB_NOT_STARTED))
       }
 
       if (typeof topic === 'function') {
@@ -79,15 +132,19 @@ module.exports = (node) => {
         topic = null
       }
 
-      const peers = Array.from(floodSub.peers.values())
+      const peers = Array.from(pubsub.peers.values())
         .filter((peer) => topic ? peer.topics.has(topic) : true)
         .map((peer) => peer.info.id.toB58String())
 
-      setImmediate(() => callback(null, peers))
-    },
+      nextTick(() => callback(null, peers))
+    }),
 
     setMaxListeners (n) {
-      return floodSub.setMaxListeners(n)
-    }
+      return pubsub.setMaxListeners(n)
+    },
+
+    start: promisify((cb) => pubsub.start(cb)),
+
+    stop: promisify((cb) => pubsub.stop(cb))
   }
 }

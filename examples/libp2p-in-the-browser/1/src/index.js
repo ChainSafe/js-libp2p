@@ -1,3 +1,5 @@
+/* eslint no-console: ["error", { allow: ["log"] }] */
+/* eslint max-nested-callbacks: ["error", 5] */
 'use strict'
 
 const domReady = require('detect-dom-ready')
@@ -13,13 +15,7 @@ domReady(() => {
     }
 
     node.on('peer:discovery', (peerInfo) => {
-      console.log('Discovered a peer')
-      const idStr = peerInfo.id.toB58String()
-      console.log('Discovered: ' + idStr)
-
-      node.dial(peerInfo, (err, conn) => {
-        if (err) { return console.log('Failed to dial:', idStr) }
-      })
+      console.log('Discovered a peer:', peerInfo.id.toB58String())
     })
 
     node.on('peer:connect', (peerInfo) => {
@@ -33,13 +29,13 @@ domReady(() => {
 
     node.on('peer:disconnect', (peerInfo) => {
       const idStr = peerInfo.id.toB58String()
-      console.log('Lost connection to: ' + idStr)
-      document.getElementById(idStr).remove()
+      const el = document.getElementById(idStr)
+      el && el.remove()
     })
 
     node.start((err) => {
       if (err) {
-        return console.log('WebRTC not supported')
+        return console.log(err)
       }
 
       const idStr = node.peerInfo.id.toB58String()
@@ -50,6 +46,9 @@ domReady(() => {
       myPeerDiv.append(idDiv)
 
       console.log('Node is listening o/')
+      node.peerInfo.multiaddrs.toArray().forEach(ma => {
+        console.log(ma.toString())
+      })
 
       // NOTE: to stop the node
       // node.stop((err) => {})

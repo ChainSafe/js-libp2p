@@ -8,7 +8,7 @@ const sinon = require('sinon')
 const waterfall = require('async/waterfall')
 const series = require('async/series')
 const parallel = require('async/parallel')
-const Circuit = require('libp2p-circuit')
+const Circuit = require('../src/circuit')
 const multiaddr = require('multiaddr')
 
 const createNode = require('./utils/create-node')
@@ -16,7 +16,7 @@ const tryEcho = require('./utils/try-echo')
 const echo = require('./utils/echo')
 
 describe('circuit relay', () => {
-  let handlerSpies = []
+  const handlerSpies = []
   let relayNode1
   let relayNode2
   let nodeWS1
@@ -114,10 +114,9 @@ describe('circuit relay', () => {
         nodeWS2 = node
         cb()
       }),
-      // set up node with TCP and listening on relay1
+      // set up node with TCP
       (cb) => setupNode([
-        '/ip4/0.0.0.0/tcp/0',
-        `/ipfs/${relayNode1.peerInfo.id.toB58String()}/p2p-circuit`
+        '/ip4/0.0.0.0/tcp/0'
       ], {
         config: {
           relay: {
@@ -128,10 +127,9 @@ describe('circuit relay', () => {
         nodeTCP1 = node
         cb()
       }),
-      // set up node with TCP and listening on relay2 over TCP transport
+      // set up node with TCP
       (cb) => setupNode([
-        '/ip4/0.0.0.0/tcp/0',
-        `/ip4/0.0.0.0/tcp/0/ipfs/${relayNode2.peerInfo.id.toB58String()}/p2p-circuit`
+        '/ip4/0.0.0.0/tcp/0'
       ], {
         config: {
           relay: {

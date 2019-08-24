@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 'use strict'
 
 const libp2p = require('../../')
@@ -6,6 +7,7 @@ const Mplex = require('libp2p-mplex')
 const SECIO = require('libp2p-secio')
 const PeerInfo = require('peer-info')
 const MulticastDNS = require('libp2p-mdns')
+const Gossipsub = require('libp2p-gossipsub')
 const defaultsDeep = require('@nodeutils/defaults-deep')
 const waterfall = require('async/waterfall')
 const parallel = require('async/parallel')
@@ -18,7 +20,8 @@ class MyBundle extends libp2p {
         transport: [ TCP ],
         streamMuxer: [ Mplex ],
         connEncryption: [ SECIO ],
-        peerDiscovery: [ MulticastDNS ]
+        peerDiscovery: [ MulticastDNS ],
+        pubsub: Gossipsub
       },
       config: {
         peerDiscovery: {
@@ -27,8 +30,9 @@ class MyBundle extends libp2p {
             enabled: true
           }
         },
-        EXPERIMENTAL: {
-          pubsub: true
+        pubsub: {
+          enabled: true,
+          emitSelf: true
         }
       }
     }
@@ -61,25 +65,39 @@ parallel([
   const node1 = nodes[0]
   const node2 = nodes[1]
 
-  series([
-    (cb) => node1.once('peer:discovery', (peer) => node1.dial(peer, cb)),
-    (cb) => setTimeout(cb, 500)
-  ], (err) => {
-    if (err) { throw err }
+  node1.once('peer:connect', (peer) => {
+    console.log('connected to %s', peer.id.toB58String())
 
-    // Subscribe to the topic 'news'
-    node1.pubsub.subscribe('news',
-      (msg) => console.log(msg.from, msg.data.toString()),
-      () => {
+    series([
+      // node1 subscribes to "news"
+      (cb) => node1.pubsub.subscribe(
+        'news',
+        (msg) => console.log(`node1 received: ${msg.data.toString()}`),
+        cb
+      ),
+      (cb) => setTimeout(cb, 500),
+      // node2 subscribes to "news"
+      (cb) => node2.pubsub.subscribe(
+        'news',
+        (msg) => console.log(`node2 received: ${msg.data.toString()}`),
+        cb
+      ),
+      (cb) => setTimeout(cb, 500),
+      // node2 publishes "news" every second
+      (cb) => {
         setInterval(() => {
-          // Publish the message on topic 'news'
           node2.pubsub.publish(
             'news',
             Buffer.from('Bird bird bird, bird is the word!'),
-            () => {}
+            (err) => {
+              if (err) { throw err }
+            }
           )
         }, 1000)
-      }
-    )
+        cb()
+      },
+    ], (err) => {
+      if (err) { throw err }
+    })
   })
 })

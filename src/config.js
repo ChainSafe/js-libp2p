@@ -1,50 +1,103 @@
 'use strict'
 
-const Joi = require('joi')
+const mergeOptions = require('merge-options')
+const { struct, superstruct } = require('superstruct')
+const { optional, list } = struct
 
-const ModuleSchema = Joi.alternatives().try(Joi.func(), Joi.object())
+const DefaultConfig = {
+  connectionManager: {
+    minPeers: 25
+  },
+  config: {
+    dht: {
+      enabled: false,
+      kBucketSize: 20,
+      randomWalk: {
+        enabled: false, // disabled waiting for https://github.com/libp2p/js-libp2p-kad-dht/issues/86
+        queriesPerPeriod: 1,
+        interval: 300e3,
+        timeout: 10e3
+      }
+    },
+    peerDiscovery: {
+      autoDial: true
+    },
+    pubsub: {
+      enabled: true,
+      emitSelf: true,
+      signMessages: true,
+      strictSigning: true
+    },
+    relay: {
+      enabled: true,
+      hop: {
+        enabled: false,
+        active: false
+      }
+    }
+  }
+}
 
-const OptionsSchema = Joi.object({
-  // TODO: create proper validators for the generics
-  connectionManager: Joi.object(),
-  peerInfo: Joi.object().required(),
-  peerBook: Joi.object(),
-  modules: Joi.object().keys({
-    transport: Joi.array().items(ModuleSchema).min(1).required(),
-    streamMuxer: Joi.array().items(ModuleSchema).allow(null),
-    connEncryption: Joi.array().items(ModuleSchema).allow(null),
-    connProtector: Joi.object().keys({
-      protect: Joi.func().required()
-    }).unknown(),
-    peerDiscovery: Joi.array().items(ModuleSchema).allow(null),
-    dht: ModuleSchema.allow(null)
-  }).required(),
-  config: Joi.object().keys({
-    peerDiscovery: Joi.object().allow(null),
-    relay: Joi.object().keys({
-      enabled: Joi.boolean().default(false),
-      hop: Joi.object().keys({
-        enabled: Joi.boolean().default(false),
-        active: Joi.boolean().default(false)
+// Define custom types
+const s = superstruct({
+  types: {
+    transport: value => {
+      if (value.length === 0) return 'ERROR_EMPTY'
+      value.forEach(i => {
+        if (!i.dial) return 'ERR_NOT_A_TRANSPORT'
       })
-    }).default(),
-    dht: Joi.object().keys({
-      kBucketSize: Joi.number().allow(null),
-      enabledDiscovery: Joi.boolean().default(true)
-    }),
-    EXPERIMENTAL: Joi.object().keys({
-      dht: Joi.boolean().default(false),
-      pubsub: Joi.boolean().default(false)
-    }).default()
-  }).default()
+      return true
+    },
+    protector: value => {
+      if (!value.protect) return 'ERR_NOT_A_PROTECTOR'
+      return true
+    }
+  }
 })
 
-module.exports.validate = (options) => {
-  options = Joi.attempt(options, OptionsSchema)
+const modulesSchema = s({
+  connEncryption: optional(list([s('object|function')])),
+  // this is hacky to simulate optional because interface doesnt work correctly with it
+  // change to optional when fixed upstream
+  connProtector: s('undefined|protector'),
+  contentRouting: optional(list(['object'])),
+  dht: optional(s('null|function|object')),
+  pubsub: optional(s('null|function|object')),
+  peerDiscovery: optional(list([s('object|function')])),
+  peerRouting: optional(list(['object'])),
+  streamMuxer: optional(list([s('object|function')])),
+  transport: 'transport'
+})
 
-  // Ensure dht is correct
-  if (options.config.EXPERIMENTAL.dht) {
-    Joi.assert(options.modules.dht, ModuleSchema.required())
+const configSchema = s({
+  peerDiscovery: 'object?',
+  relay: 'object?',
+  dht: 'object?',
+  pubsub: 'object?'
+})
+
+const optionsSchema = s({
+  switch: 'object?',
+  connectionManager: 'object?',
+  datastore: 'object?',
+  peerInfo: 'object',
+  peerBook: 'object?',
+  modules: modulesSchema,
+  config: configSchema
+})
+
+module.exports.validate = (opts) => {
+  opts = mergeOptions(DefaultConfig, opts)
+  const [error, options] = optionsSchema.validate(opts)
+
+  // Improve errors throwed, reduce stack by throwing here and add reason to the message
+  if (error) {
+    throw new Error(`${error.message}${error.reason ? ' - ' + error.reason : ''}`)
+  } else {
+    // Throw when dht is enabled but no dht module provided
+    if (options.config.dht.enabled) {
+      s('function|object')(options.modules.dht)
+    }
   }
 
   return options
