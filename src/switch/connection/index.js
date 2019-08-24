@@ -319,6 +319,7 @@ class ConnectionFSM extends BaseConnection {
         }
 
         const observedConn = observeConnection(null, this.switch.crypto.tag, _conn, this.switch.observer)
+        observedConn.role = 0
         const encryptedConn = this.switch.crypto.encrypt(this.ourPeerInfo.id, observedConn, this.theirPeerInfo.id, (err) => {
           if (err) {
             return this.close(err)
