@@ -66,7 +66,8 @@
  * ```
  */
 
-import { statfs } from 'node:fs/promises'
+// Bun does not yet support statfs (but soon will)
+// import { statfs } from 'node:fs/promises'
 import { totalmem } from 'node:os'
 import { serviceCapabilities } from '@libp2p/interface'
 import each from 'it-foreach'
@@ -195,16 +196,19 @@ class PrometheusMetrics implements Metrics {
     this.registerMetricGroup('nodejs_fs_usage_bytes', {
       label: 'filesystem',
       calculate: async () => {
-        const stats = await statfs(init?.statfsLocation ?? process.cwd())
-        const total = stats.bsize * stats.blocks
-        const available = stats.bsize * stats.bavail
-
         return {
-          total,
-          free: stats.bsize * stats.bfree,
-          available,
-          used: (available / total) * 100
+          total: 0,
         }
+        // const stats = await statfs(init?.statfsLocation ?? process.cwd())
+        // const total = stats.bsize * stats.blocks
+        // const available = stats.bsize * stats.bavail
+
+        // return {
+        //   total,
+        //   free: stats.bsize * stats.bfree,
+        //   available,
+        //   used: (available / total) * 100
+        // }
       }
     })
   }
